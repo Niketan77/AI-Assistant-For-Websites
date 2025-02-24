@@ -210,7 +210,7 @@ else:
 
 st.markdown("""
     <footer style="text-align: center; padding: 20px; color: #666;">
-        Build by Niketan Choudhari | Using Google Gemini Ai| 
+        Build by Niketan Choudhari | Powered By Google Gemini AI| 
         <a href="https://linkedin.com/in/niketan-choudhari-807980270" target="_blank" style="color: #0077B5; margin-right: 10px;">LinkedIn</a> | 
         <a href="https://github.com/Niketan77" target="_blank" style="color: #333;">GitHub</a>
     </footer>
