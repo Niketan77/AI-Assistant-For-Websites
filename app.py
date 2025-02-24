@@ -3,6 +3,17 @@ import requests
 from bs4 import BeautifulSoup
 import time
 from datetime import datetime
+import os
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
+
+# Get the API key from the environment variable
+API_KEY = os.getenv("GEMINI_API_KEY")
+if not API_KEY:
+    st.error("API key not found. Please set the GEMINI_API_KEY environment variable.")
+    st.stop()
 
 # Streamlit page configuration with wide layout
 st.set_page_config(page_title="AI AGENT ", layout="wide")
@@ -102,8 +113,7 @@ def fetch_website_content(url):
 
 def get_gemini_response(prompt):
     """Calls the Gemini API with the prompt, ensuring detailed, relevant, and conversational responses."""
-    api_key = "AIzaSyACIafUagUoPgjKyC-lzXQl4ohmRQBS8Ao"
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={API_KEY}"
     data = {
         "contents": [{
             "parts": [{"text": prompt}]
