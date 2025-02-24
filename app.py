@@ -126,7 +126,7 @@ def get_gemini_response(prompt):
         return f"Error: Invalid API response - {str(e)}"
 
 # Main app layout (simple, wide, single-column)
-st.title("AI Agent To Interact With Any Website")
+st.title("AI Agent To Chat With Any Website")
 st.write("Enter a website URL and engage in a natural, interactive conversation about its content!")
 
 # URL input and loading section (wide, single column)
