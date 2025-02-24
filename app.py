@@ -102,7 +102,7 @@ def fetch_website_content(url):
 
 def get_gemini_response(prompt):
     """Calls the Gemini API with the prompt, ensuring detailed, relevant, and conversational responses."""
-    api_key = "AIzaSyACIafUagUoPgjKyC-lzXQl4ohmRQBS8Ao"
+    api_key = "Here Your Gemini API Key"
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
     data = {
         "contents": [{
