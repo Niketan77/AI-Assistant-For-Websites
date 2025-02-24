@@ -11,55 +11,55 @@ st.set_page_config(page_title="AI AGENT ", layout="wide")
 st.markdown("""
     <style>
     body {
-        color: #000000; /* Default black text for readability */
-        margin: 0; /* Remove default margins */
-        padding: 0; /* Remove default padding */
+        color: #000000;
+        margin: 0;
+        padding: 0;
     }
     .stButton>button {
-        background-color: #4CAF50; /* Streamlit default green */
+        background-color: #4CAF50;
         color: white;
         border: none;
         border-radius: 4px;
-        padding: 5px 10px;  /* Reduced padding for smaller buttons */
-        font-size: 14px;  /* Smaller font size */
+        padding: 5px 10px; 
+        font-size: 14px;
         margin-top: 10px;
-        width: auto;  /* Let button size adjust based on content */
+        width: auto;
     }
     .stButton>button:hover {
         background-color: #45a049;
     }
     .stTextInput>div>input {
-        background-color: transparent; /* No background for inputs */
-        color: #000000; /* Black text */
+        background-color: transparent;
+        color: #000000;
         border: 1px solid #ccc;
         border-radius: 4px;
         padding: 12px;
         font-size: 16px;
         margin-top: 10px;
-        width: 100%; /* Stretch inputs horizontally */
+        width: 100%;
     }
     .stSuccess {
-        background-color: #4CAF50; /* Streamlit default green */
+        background-color: #4CAF50;
         color: white;
         padding: 12px;
         border-radius: 4px;
         margin-top: 10px;
-        width: 100%; /* Stretch success messages horizontally */
+        width: 100%;
     }
     .stError {
-        background-color: #f44336; /* Streamlit default red */
+        background-color: #f44336;
         color: white;
         padding: 12px;
         border-radius: 4px;
         margin-top: 10px;
-        width: 100%; /* Stretch error messages horizontally */
+        width: 100%;
     }
     .chat-container {
-        padding: 5px 0; /* Minimal vertical padding, no horizontal padding */
+        padding: 5px 0;
         border-radius: 4px;
         margin-top: 10px;
         margin-bottom: 10px;
-        width: 100%; /* Stretch chat horizontally */
+        width: 100%;
     }
     .timestamp {
         font-size: 12px;
@@ -166,7 +166,6 @@ if st.session_state.content and "Error" not in st.session_state.content:
         </div>
         """, unsafe_allow_html=True)
 
-    # Chat input and actions (wide, single column)
     # Chat input and actions (wide, single column)
     row = st.columns([5, 1])  # Adjust the ratio as needed
     with row[0]:
