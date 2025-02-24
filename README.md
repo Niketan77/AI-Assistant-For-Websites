@@ -51,9 +51,6 @@ Contributions are welcome! If you have feature suggestions, bug fixes, or improv
 
 Please adhere to the coding style and include appropriate tests for any new features.
 
-## License
-This project is licensed under the [MIT License](LICENSE).
-
 ## Contact
 Developed by [Niketan Choudhari](https://linkedin.com/in/niketan-choudhari-807980270). For questions, suggestions, or issues, please contact via GitHub or LinkedIn.
 
