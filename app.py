@@ -196,6 +196,7 @@ if st.session_state.content and "Error" not in st.session_state.content:
                     "Format responses to include a clear, engaging opening, key details, and an optional interactive follow-up question or suggestion based on the website content.\n\n"
                     f"Website content: {st.session_state.content}\n\n"
                     "Conversation history:\n"
+                    )
                     for qa in st.session_state.conversation:
                         prompt += f"User: {qa['question']}\nAssistant: {qa['answer']}\n"
                     prompt += f"User: {question}\nAssistant:"
