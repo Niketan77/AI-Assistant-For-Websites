@@ -186,10 +186,11 @@ if st.session_state.content and "Error" not in st.session_state.content:
                 with st.spinner("Loading..."):
                     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                     prompt = (
-                        "You are a highly knowledgeable and analytical AI assistant specializing in web content analysis. "
-                        "Provide a expert response based on the provided website content. "
-                        "In your response, include examples, and well-structured reasoning. "
-                        "Strive for clarity, depth, and precision. "
+                        "You are an advanced, highly precise AI assistant providing detailed, relevant, and concise responses specific to the website’s content. "
+                        "Extract and summarize key information from the website, focusing on the user’s question, and avoid generic or verbose answers. "
+                        "Use the website content and the full conversation history to maintain context, ensuring answers are specific, to the point, and directly address the question. "
+                        "If the question is unclear or unrelated, politely ask for clarification or suggest related, specific questions based on the content. "
+                        "Format responses in a clear, professional, and concise manner, avoiding unnecessary elaboration."
                         "For instance, conclude with something like: 'Would you like me to delve deeper into this subject, or is there a related aspect you would like to explore further? \n\n"
                         f"Website content: {st.session_state.content}\n\n"
                         "Conversation history:\n"
