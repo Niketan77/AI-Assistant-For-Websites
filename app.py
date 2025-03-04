@@ -187,7 +187,7 @@ if st.session_state.content and "Error" not in st.session_state.content:
                     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                     prompt = (
                         "You are a highly knowledgeable and analytical AI assistant specializing in web content analysis. "
-                        "Provide a detailed and expert response based on the provided website content. "
+                        "Provide a expert response based on the provided website content. "
                         "In your response, include technical details, examples, and well-structured reasoning. "
                         "Strive for clarity, depth, and precision. "
                         "For instance, conclude with something like: 'Would you like me to delve deeper into this subject, or is there a related aspect you would like to explore further? \n\n"
