@@ -188,7 +188,7 @@ if st.session_state.content and "Error" not in st.session_state.content:
                     prompt = (
                         "You are a highly knowledgeable and analytical AI assistant specializing in web content analysis. "
                         "Provide a expert response based on the provided website content. "
-                        "In your response, include technical details, examples, and well-structured reasoning. "
+                        "In your response, include examples, and well-structured reasoning. "
                         "Strive for clarity, depth, and precision. "
                         "For instance, conclude with something like: 'Would you like me to delve deeper into this subject, or is there a related aspect you would like to explore further? \n\n"
                         f"Website content: {st.session_state.content}\n\n"
