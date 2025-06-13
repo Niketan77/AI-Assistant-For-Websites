@@ -4,10 +4,9 @@
 AI-Assistant-For-Websites is a Streamlit-based application that enables users to interact with any website through a conversational AI agent. The application fetches content from a specified website and allows users to ask questions about that content. Leveraging the Google Gemini API, the assistant provides detailed, contextual, and dynamically generated responses based on the website's content.
 
 ## Features
-- **Dynamic Website Content Extraction:** Uses `requests` and `BeautifulSoup` to scrape text from websites.
+- **Dynamic Website Content Extraction:** Uses Selenium `requests` and `BeautifulSoup` to scrape text from websites.
 - **Interactive Chat Interface:** Built with Streamlit, providing a clean and responsive chat interface for asking questions and receiving detailed answers.
 - **AI-Powered Responses:** Integrates with the Google Gemini API to generate comprehensive and context-aware replies.
-- **Custom Styling:** Minimal CSS customizations to ensure a wide, accessible, and modern user interface.
 
 ## Installation
 
