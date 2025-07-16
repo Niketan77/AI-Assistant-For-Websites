@@ -22,6 +22,13 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Detect if running on Streamlit Cloud
+IS_STREAMLIT_CLOUD = (
+    os.path.exists("/home/appuser") or 
+    os.path.exists("/mount/src") or 
+    os.getenv("STREAMLIT_SHARING") is not None
+)
+
 # Get the API key from environment variable
 API_KEY = os.getenv("GEMINI_API_KEY")
 if not API_KEY:
@@ -307,7 +314,7 @@ def extract_with_selenium(url, timeout=15):
             driver.quit()
 
 def extract_with_requests(url):
-    """Fallback method using requests and BeautifulSoup."""
+    """Enhanced fallback method using requests and BeautifulSoup with advanced strategies."""
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
@@ -315,73 +322,239 @@ def extract_with_requests(url):
         'Accept-Encoding': 'gzip, deflate, br',
         'Connection': 'keep-alive',
         'Upgrade-Insecure-Requests': '1',
+        'Sec-Fetch-Dest': 'document',
+        'Sec-Fetch-Mode': 'navigate',
+        'Sec-Fetch-Site': 'none',
+        'Cache-Control': 'max-age=0',
     }
     
     try:
         session = requests.Session()
         session.headers.update(headers)
         
-        response = session.get(url, timeout=15, allow_redirects=True)
-        response.raise_for_status()
+        # Try multiple request strategies
+        for attempt in range(2):
+            try:
+                response = session.get(url, timeout=20, allow_redirects=True)
+                response.raise_for_status()
+                break
+            except requests.RequestException as e:
+                if attempt == 0:
+                    # Try with different headers on second attempt
+                    session.headers.update({
+                        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.1.1 Safari/605.1.15'
+                    })
+                    continue
+                else:
+                    raise e
         
         # Handle different encodings
         if response.encoding is None:
             response.encoding = 'utf-8'
         
+        # Try to detect encoding from content
+        try:
+            import chardet
+            detected = chardet.detect(response.content)
+            if detected['encoding'] and detected['confidence'] > 0.7:
+                response.encoding = detected['encoding']
+        except ImportError:
+            pass
+        
         soup = BeautifulSoup(response.content, 'html.parser')
         
-        # Remove unwanted elements
-        for element in soup(['script', 'style', 'nav', 'header', 'footer', 'aside', 'form']):
-            element.decompose()
-        
-        # Extract text using multiple strategies
+        # Extract text using multiple enhanced strategies
         text_parts = []
         
-        # Strategy 1: Priority content areas
-        priority_selectors = [
-            'main', 'article', '.content', '#content', '.post', '.entry',
-            '[role="main"]', '.main-content', '#main-content'
+        # Strategy 1: Look for JSON-LD structured data (common in modern sites)
+        json_ld_scripts = soup.find_all('script', type='application/ld+json')
+        for script in json_ld_scripts:
+            try:
+                import json
+                data = json.loads(script.string)
+                if isinstance(data, dict):
+                    # Extract text from common JSON-LD properties
+                    for key in ['description', 'text', 'articleBody', 'name', 'headline']:
+                        if key in data and isinstance(data[key], str):
+                            text_parts.append(data[key])
+            except:
+                pass
+        
+        # Strategy 2: Look for meta descriptions and OpenGraph data
+        meta_tags = soup.find_all('meta')
+        for meta in meta_tags:
+            if meta.get('name') in ['description', 'og:description', 'twitter:description']:
+                content = meta.get('content', '')
+                if content and len(content) > 20:
+                    text_parts.append(f"Meta Description: {content}")
+            elif meta.get('property') in ['og:title', 'og:description']:
+                content = meta.get('content', '')
+                if content and len(content) > 10:
+                    text_parts.append(content)
+        
+        # Remove unwanted elements but preserve more content-rich elements
+        for element in soup(['script', 'style', 'noscript']):
+            element.decompose()
+        
+        # Strategy 3: Enhanced content extraction with more selectors
+        enhanced_selectors = [
+            # Main content areas
+            'main', 'article', '[role="main"]', '#main', '.main',
+            '.content', '#content', '.main-content', '#main-content',
+            '.post', '.entry', '.article', '.page-content',
+            # Common content containers
+            '.container', '.wrapper', '.body', '.inner',
+            '.section', '.primary', '.site-content',
+            # Specific to business/portfolio sites
+            '.hero', '.intro', '.about', '.services', '.portfolio',
+            '.company', '.team', '.mission', '.vision',
+            # Blog/news specific
+            '.post-content', '.entry-content', '.article-content',
+            # E-commerce specific
+            '.product-info', '.description', '.details'
         ]
         
         content_found = False
-        for selector in priority_selectors:
+        for selector in enhanced_selectors:
             elements = soup.select(selector)
             if elements:
                 for element in elements:
+                    # Get text while preserving some structure
                     text = element.get_text(separator=' ', strip=True)
-                    if len(text) > 100:
+                    if len(text) > 50:  # Lower threshold for content detection
                         text_parts.append(text)
                         content_found = True
-                break
+                if content_found and len(' '.join(text_parts)) > 200:
+                    break
         
-        # Strategy 2: If no main content found, get paragraphs and headings
-        if not content_found:
-            for tag in ['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'div', 'li']:
+        # Strategy 4: If still no substantial content, extract from all visible text
+        if not content_found or len(' '.join(text_parts)) < 100:
+            # Remove navigation and other non-content elements
+            for element in soup(['nav', 'header', 'footer', 'aside', 'form', 'button']):
+                element.decompose()
+            
+            # Extract from headings and paragraphs first
+            for tag in ['h1', 'h2', 'h3', 'h4', 'h5', 'h6']:
                 elements = soup.find_all(tag)
                 for element in elements:
                     text = element.get_text(strip=True)
-                    if len(text) > 15:
-                        text_parts.append(text)
+                    if len(text) > 5:
+                        text_parts.append(f"Heading: {text}")
+            
+            # Then paragraphs and other content
+            for tag in ['p', 'div', 'span', 'section', 'li', 'td']:
+                elements = soup.find_all(tag)
+                for element in elements:
+                    text = element.get_text(strip=True)
+                    # Be more inclusive of shorter text for JS-heavy sites
+                    if len(text) > 10 and text not in text_parts:
+                        # Filter out common non-content text
+                        if not any(skip in text.lower() for skip in [
+                            'javascript', 'cookie', 'privacy policy', 'terms of service',
+                            'loading...', 'please wait', 'error', 'not found'
+                        ]):
+                            text_parts.append(text)
         
-        # Get page title
+        # Strategy 5: Try to find content in script tags (some sites put content in JSON)
+        script_tags = soup.find_all('script')
+        for script in script_tags:
+            if script.string:
+                script_content = script.string.strip()
+                # Look for JSON data that might contain content
+                if 'content' in script_content.lower() or 'description' in script_content.lower():
+                    try:
+                        import json
+                        # Try to extract JSON from script content
+                        start_idx = script_content.find('{')
+                        end_idx = script_content.rfind('}') + 1
+                        if start_idx != -1 and end_idx > start_idx:
+                            potential_json = script_content[start_idx:end_idx]
+                            data = json.loads(potential_json)
+                            if isinstance(data, dict):
+                                for key in ['content', 'description', 'text', 'body']:
+                                    if key in data and isinstance(data[key], str) and len(data[key]) > 20:
+                                        text_parts.append(f"Script Content: {data[key]}")
+                    except:
+                        pass
+        
+        # Strategy 6: Extract text from data attributes and aria-labels
+        for element in soup.find_all(attrs={'data-content': True}):
+            content = element.get('data-content', '')
+            if content and len(content) > 10:
+                text_parts.append(content)
+        
+        for element in soup.find_all(attrs={'aria-label': True}):
+            label = element.get('aria-label', '')
+            if label and len(label) > 10:
+                text_parts.append(label)
+        
+        # Get enhanced page title and meta info
         title = soup.title.string if soup.title else "No title"
         
-        # Clean and combine text
-        combined_text = ' '.join(text_parts)
-        cleaned_text = re.sub(r'\s+', ' ', combined_text).strip()
+        # Try to get a better title from og:title or h1
+        og_title = soup.find('meta', property='og:title')
+        if og_title and og_title.get('content'):
+            title = og_title.get('content')
+        elif soup.h1:
+            h1_text = soup.h1.get_text(strip=True)
+            if h1_text and len(h1_text) > len(title.strip()):
+                title = h1_text
         
-        # Combine title and content
-        final_content = f"Title: {title}\n\nContent: {cleaned_text}"
+        # Clean and combine text with better deduplication
+        unique_texts = []
+        seen_texts = set()
+        for text in text_parts:
+            # Clean the text
+            cleaned = re.sub(r'\s+', ' ', text).strip()
+            if len(cleaned) > 5:
+                # Simple deduplication based on first 50 characters
+                text_key = cleaned[:50].lower()
+                if text_key not in seen_texts:
+                    seen_texts.add(text_key)
+                    unique_texts.append(cleaned)
         
-        if len(cleaned_text) < 50:
-            return None, "Insufficient content found. The page might require JavaScript or have access restrictions."
+        combined_text = ' '.join(unique_texts)
+        
+        # Final content assembly with enhanced fallback
+        final_content = f"Title: {title}\n\nContent: {combined_text}"
+        
+        # More lenient content threshold for JS-heavy sites
+        if len(combined_text) < 30:
+            # Last resort: try to extract any visible text with better filtering
+            body_text = soup.get_text(separator=' ', strip=True)
+            if body_text:
+                # Filter out common boilerplate text
+                lines = body_text.split('\n')
+                filtered_lines = []
+                for line in lines:
+                    line = line.strip()
+                    if (len(line) > 10 and 
+                        not any(skip in line.lower() for skip in [
+                            'javascript', 'cookie', 'privacy policy', 'terms of service',
+                            'loading...', 'please wait', 'error', 'not found', 'menu',
+                            'home', 'about', 'contact', 'login', 'register', 'search'
+                        ]) and
+                        not line.lower().startswith(('©', 'copyright', 'all rights'))):
+                        filtered_lines.append(line)
+                
+                if filtered_lines:
+                    cleaned_body = ' '.join(filtered_lines[:50])  # Limit to first 50 lines
+                    cleaned_body = re.sub(r'\s+', ' ', cleaned_body).strip()
+                    if len(cleaned_body) > 30:
+                        final_content = f"Title: {title}\n\nContent: {cleaned_body[:3000]}"
+                    else:
+                        return None, "Insufficient content found. The page might require JavaScript or have access restrictions."
+                else:
+                    return None, "No readable content found after filtering. The page might be entirely JavaScript-based."
+            else:
+                return None, "No readable content found. The page might be entirely JavaScript-based or have access restrictions."
         
         return final_content[:20000], None
         
     except requests.RequestException as e:
         return None, f"Network error: {str(e)}"
     except Exception as e:
-        return None, f"Parsing error: {str(e)}"
+        return None, f"Content extraction error: {str(e)}"
 
 def fetch_website_content(url, use_selenium=True):
     """Main function to fetch website content with multiple strategies."""
@@ -395,7 +568,12 @@ def fetch_website_content(url, use_selenium=True):
     content = None
     error_msg = None
     
-    # Try Selenium first for JavaScript content
+    # Disable Selenium on Streamlit Cloud due to browser limitations
+    if IS_STREAMLIT_CLOUD:
+        use_selenium = False
+        logger.info("Running on Streamlit Cloud, using enhanced requests-only mode")
+    
+    # Try Selenium first for JavaScript content (only if not on Streamlit Cloud)
     if use_selenium:
         try:
             content, error_msg = extract_with_selenium(validated_url)
@@ -407,16 +585,23 @@ def fetch_website_content(url, use_selenium=True):
             logger.error(f"Selenium method failed: {str(e)}")
             error_msg = str(e)
     
-    # Fallback to requests method
+    # Fallback to enhanced requests method
     if not content:
         try:
             content, fallback_error = extract_with_requests(validated_url)
             if content:
-                extraction_method = "Static HTML (Requests)" + (" - Fallback" if use_selenium else "")
+                extraction_method = "Enhanced Static HTML (Requests)" + (" - Fallback" if use_selenium else " - Cloud Mode")
             else:
-                error_msg = fallback_error
+                # Provide more helpful error message for Streamlit Cloud
+                if IS_STREAMLIT_CLOUD:
+                    error_msg = f"Content extraction failed. This website might be heavily JavaScript-dependent. {fallback_error} Note: JavaScript rendering is not available on Streamlit Cloud, so some dynamic content may not be accessible."
+                else:
+                    error_msg = fallback_error
         except Exception as e:
-            error_msg = f"All extraction methods failed: {str(e)}"
+            if IS_STREAMLIT_CLOUD:
+                error_msg = f"All extraction methods failed on Streamlit Cloud: {str(e)}. This website might require JavaScript rendering which is not available in this environment."
+            else:
+                error_msg = f"All extraction methods failed: {str(e)}"
     
     if content:
         # Calculate content statistics
