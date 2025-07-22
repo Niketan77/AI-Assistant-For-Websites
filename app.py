@@ -8,12 +8,6 @@ from dotenv import load_dotenv
 import re
 import logging
 from urllib.parse import urlparse
-from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import TimeoutException, WebDriverException
 
 # Load environment variables from .env file
 load_dotenv()
@@ -22,10 +16,16 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Get the API key from environment variable
-API_KEY = os.getenv("GEMINI_API_KEY")
-if not API_KEY:
-    st.error("API key not found. Please set the GEMINI_API_KEY environment variable.")
+# Get the API keys from environment variables
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+SCRAPERAPI_KEY = os.getenv("SCRAPERAPI_KEY")
+
+if not GEMINI_API_KEY:
+    st.error("GEMINI_API_KEY not found. Please set the GEMINI_API_KEY environment variable.")
+    st.stop()
+
+if not SCRAPERAPI_KEY:
+    st.error("SCRAPERAPI_KEY not found. Please set the SCRAPERAPI_KEY environment variable.")
     st.stop()
 
 # Streamlit page configuration with wide layout
@@ -200,283 +200,129 @@ def validate_url(url):
     except Exception as e:
         return None, f"URL validation error: {str(e)}"
 
-def setup_selenium_driver():
-    """Sets up a headless Chrome driver for JavaScript rendering."""
+def extract_with_scraperapi(url):
+    """Extracts fully-rendered HTML via ScraperAPI, then cleans & returns text."""
+    api_endpoint = f"http://api.scraperapi.com?api_key={SCRAPERAPI_KEY}&render=true&url={url}"
     try:
-        chrome_options = Options()
-        chrome_options.add_argument("--headless")
-        chrome_options.add_argument("--no-sandbox")
-        chrome_options.add_argument("--disable-dev-shm-usage")
-        chrome_options.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-        
-        driver = webdriver.Chrome(options=chrome_options)
-        return driver, None
-    except Exception as e:
-        logger.error(f"Selenium setup failed: {str(e)}")
-        return None, f"Browser setup failed: {str(e)}. Please ensure Chrome and ChromeDriver are installed."
-
-def extract_with_selenium(url, timeout=15):
-    """Extracts content using Selenium for JavaScript-rendered pages."""
-    driver, error = setup_selenium_driver()
-    if error:
-        return None, error
-    
-    try:
-        driver.set_page_load_timeout(timeout)
-        driver.get(url)
-        
-        WebDriverWait(driver, 10).until(
-            EC.presence_of_element_located((By.TAG_NAME, "body"))
-        )
-        time.sleep(3)
-        
-        try:
-            WebDriverWait(driver, 5).until_not(
-                EC.presence_of_element_located((By.CSS_SELECTOR, ".loading, .spinner, [data-loading]"))
-            )
-        except TimeoutException:
-            pass
-        
-        # Execute JavaScript to ensure all content is loaded
-        driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-        time.sleep(2)
-        driver.execute_script("window.scrollTo(0, 0);")
-        
-        # Get page source after JavaScript execution
-        html_source = driver.page_source
-        
-        # Parse with BeautifulSoup
-        soup = BeautifulSoup(html_source, 'html.parser')
-        
-        # Remove unwanted elements
-        for element in soup(['script', 'style', 'nav', 'header', 'footer', 'aside', 'form']):
-            element.decompose()
-        
-        # Extract text from multiple elements
-        text_elements = []
-        
-        # Priority elements for content extraction
-        priority_selectors = [
-            'main', 'article', '.content', '#content', '.post', '.entry',
-            '[role="main"]', '.main-content', '#main-content'
-        ]
-        
-        content_found = False
-        for selector in priority_selectors:
-            elements = soup.select(selector)
-            if elements:
-                for element in elements:
-                    text = element.get_text(separator=' ', strip=True)
-                    if len(text) > 100:
-                        text_elements.append(text)
-                        content_found = True
+        resp = requests.get(api_endpoint, timeout=30)
+        resp.raise_for_status()
+        html = resp.text
+        soup = BeautifulSoup(html, 'html.parser')
+        # remove scripts/styles/nav/etc.
+        for tag in soup(['script','style','nav','header','footer','aside','form']):
+            tag.decompose()
+        # gather text
+        texts = []
+        for selector in ['main','article','.content','#content']:
+            elems = soup.select(selector)
+            if elems:
+                for el in elems:
+                    t = el.get_text(separator=' ', strip=True)
+                    if len(t) > 100:
+                        texts.append(t)
                 break
-        
-        # If no priority content found, extract from common elements
-        if not content_found:
-            for tag in ['p', 'div', 'span', 'section', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'li']:
-                elements = soup.find_all(tag)
-                for element in elements:
-                    text = element.get_text(strip=True)
-                    if len(text) > 20 and text not in text_elements:
-                        text_elements.append(text)
-        
-        # Clean and join text
-        combined_text = ' '.join(text_elements)
-        cleaned_text = re.sub(r'\s+', ' ', combined_text).strip()
-        
-        # Get page title
+        if not texts:
+            # fallback to paragraphs
+            for p in soup.find_all(['p','h1','h2','li']):
+                t = p.get_text(strip=True)
+                if len(t) > 20:
+                    texts.append(t)
+        combined = ' '.join(texts)
+        cleaned = re.sub(r'\s+',' ',combined).strip()
         title = soup.title.string if soup.title else "No title"
-        
-        # Combine title and content
-        final_content = f"Title: {title}\n\nContent: {cleaned_text}"
-        
-        if len(cleaned_text) < 100:
-            return None, "Insufficient content extracted. The page might be heavily JavaScript-dependent or have access restrictions."
-        
-        return final_content[:20000], None
-        
-    except TimeoutException:
-        return None, "Page load timeout. The website might be slow or unresponsive."
-    except WebDriverException as e:
-        return None, f"Browser error: {str(e)}"
+        if len(cleaned) < 100:
+            return None, "Insufficient content extracted by ScraperAPI."
+        return f"Title: {title}\n\nContent: {cleaned}", None
     except Exception as e:
-        return None, f"Content extraction error: {str(e)}"
-    finally:
-        if driver:
-            driver.quit()
+        return None, f"ScraperAPI error: {str(e)}"
 
 def extract_with_requests(url):
     """Fallback method using requests and BeautifulSoup."""
     headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.5',
-        'Accept-Encoding': 'gzip, deflate, br',
-        'Connection': 'keep-alive',
-        'Upgrade-Insecure-Requests': '1',
+        'User-Agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+        'Accept':'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
     }
-    
     try:
-        session = requests.Session()
-        session.headers.update(headers)
-        
-        response = session.get(url, timeout=15, allow_redirects=True)
-        response.raise_for_status()
-        
-        # Handle different encodings
-        if response.encoding is None:
-            response.encoding = 'utf-8'
-        
-        soup = BeautifulSoup(response.content, 'html.parser')
-        
-        # Remove unwanted elements
-        for element in soup(['script', 'style', 'nav', 'header', 'footer', 'aside', 'form']):
-            element.decompose()
-        
-        # Extract text using multiple strategies
-        text_parts = []
-        
-        # Strategy 1: Priority content areas
-        priority_selectors = [
-            'main', 'article', '.content', '#content', '.post', '.entry',
-            '[role="main"]', '.main-content', '#main-content'
-        ]
-        
-        content_found = False
-        for selector in priority_selectors:
-            elements = soup.select(selector)
-            if elements:
-                for element in elements:
-                    text = element.get_text(separator=' ', strip=True)
-                    if len(text) > 100:
-                        text_parts.append(text)
-                        content_found = True
+        resp = requests.get(url, headers=headers, timeout=15)
+        resp.raise_for_status()
+        soup = BeautifulSoup(resp.content, 'html.parser')
+        for tag in soup(['script','style','nav','header','footer','aside','form']):
+            tag.decompose()
+        texts = []
+        for selector in ['main','article','.content','#content']:
+            elems = soup.select(selector)
+            if elems:
+                for el in elems:
+                    t = el.get_text(separator=' ', strip=True)
+                    if len(t) > 100:
+                        texts.append(t)
                 break
-        
-        # Strategy 2: If no main content found, get paragraphs and headings
-        if not content_found:
-            for tag in ['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'div', 'li']:
-                elements = soup.find_all(tag)
-                for element in elements:
-                    text = element.get_text(strip=True)
-                    if len(text) > 15:
-                        text_parts.append(text)
-        
-        # Get page title
+        if not texts:
+            for p in soup.find_all(['p','h1','h2','li']):
+                t = p.get_text(strip=True)
+                if len(t) > 20:
+                    texts.append(t)
+        combined = ' '.join(texts)
+        cleaned = re.sub(r'\s+',' ',combined).strip()
         title = soup.title.string if soup.title else "No title"
-        
-        # Clean and combine text
-        combined_text = ' '.join(text_parts)
-        cleaned_text = re.sub(r'\s+', ' ', combined_text).strip()
-        
-        # Combine title and content
-        final_content = f"Title: {title}\n\nContent: {cleaned_text}"
-        
-        if len(cleaned_text) < 50:
-            return None, "Insufficient content found. The page might require JavaScript or have access restrictions."
-        
-        return final_content[:20000], None
-        
-    except requests.RequestException as e:
-        return None, f"Network error: {str(e)}"
+        if len(cleaned) < 50:
+            return None, "Insufficient content found. The page might require JS or have restrictions."
+        return f"Title: {title}\n\nContent: {cleaned}", None
     except Exception as e:
-        return None, f"Parsing error: {str(e)}"
+        return None, f"Network/Parsing error: {str(e)}"
 
 def fetch_website_content(url, use_selenium=True):
-    """Main function to fetch website content with multiple strategies."""
-    
-    # Validate URL
-    validated_url, error = validate_url(url)
-    if error:
-        return f"Error: {error}", "validation_error"
-    
+    """Main function to fetch website content with ScraperAPI + fallback."""
+    validated, err = validate_url(url)
+    if err:
+        return f"Error: {err}", "validation_error"
+
+    # Primary: ScraperAPI
+    content, error_msg = extract_with_scraperapi(validated)
     extraction_method = ""
-    content = None
-    error_msg = None
-    
-    # Try Selenium first for JavaScript content
-    if use_selenium:
-        try:
-            content, error_msg = extract_with_selenium(validated_url)
-            if content:
-                extraction_method = "JavaScript-enabled (Selenium)"
-            else:
-                logger.warning(f"Selenium extraction failed: {error_msg}")
-        except Exception as e:
-            logger.error(f"Selenium method failed: {str(e)}")
-            error_msg = str(e)
-    
-    # Fallback to requests method
-    if not content:
-        try:
-            content, fallback_error = extract_with_requests(validated_url)
-            if content:
-                extraction_method = "Static HTML (Requests)" + (" - Fallback" if use_selenium else "")
-            else:
-                error_msg = fallback_error
-        except Exception as e:
-            error_msg = f"All extraction methods failed: {str(e)}"
-    
     if content:
-        # Calculate content statistics
-        stats = {
-            'character_count': len(content),
-            'word_count': len(content.split()),
-            'extraction_method': extraction_method
-        }
-        return content, extraction_method, stats
+        extraction_method = "JavaScript-enabled (ScraperAPI)"
     else:
-        return f"Error: {error_msg}", "error", {}
+        logger.warning(f"ScraperAPI failed: {error_msg}")
+        # Fallback: static requests
+        content, error_msg = extract_with_requests(validated)
+        if content:
+            extraction_method = "Static HTML (Requests) - Fallback"
+        else:
+            return f"Error: {error_msg}", "error", {}
+
+    stats = {
+        'character_count': len(content),
+        'word_count': len(content.split()),
+        'extraction_method': extraction_method
+    }
+    return content, extraction_method, stats
 
 def get_gemini_response(prompt):
     """Enhanced Gemini API call with better error handling."""
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={API_KEY}"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
     
     data = {
-        "contents": [{
-            "parts": [{"text": prompt}]
-        }],
-        "generationConfig": {
-            "maxOutputTokens": 2048,
-            "temperature": 0.7
-        },
-        "safetySettings": [
-            {
-                "category": "HARM_CATEGORY_HARASSMENT",
-                "threshold": "BLOCK_MEDIUM_AND_ABOVE"
-            },
-            {
-                "category": "HARM_CATEGORY_HATE_SPEECH",
-                "threshold": "BLOCK_MEDIUM_AND_ABOVE"
-            }
+        "contents": [{"parts":[{"text":prompt}]}],
+        "generationConfig": {"maxOutputTokens":2048,"temperature":0.7},
+        "safetySettings":[
+            {"category":"HARM_CATEGORY_HARASSMENT","threshold":"BLOCK_MEDIUM_AND_ABOVE"},
+            {"category":"HARM_CATEGORY_HATE_SPEECH","threshold":"BLOCK_MEDIUM_AND_ABOVE"}
         ]
     }
-    
-    headers = {"Content-Type": "application/json"}
-    
+    headers = {"Content-Type":"application/json"}
     try:
-        response = requests.post(url, json=data, headers=headers, timeout=30)
-        response.raise_for_status()
-        
-        result = response.json()
-        
-        if "candidates" in result and result["candidates"]:
-            candidate = result["candidates"][0]
-            if "content" in candidate and "parts" in candidate["content"]:
-                answer = candidate["content"]["parts"][0]["text"].strip()
-                return answer
-            else:
-                return "Error: Invalid response structure from API"
-        else:
-            return "Error: No candidates in API response"
-            
-    except requests.RequestException as e:
-        return f"Error: API request failed - {str(e)}"
-    except (KeyError, IndexError) as e:
-        return f"Error: Invalid API response structure - {str(e)}"
+        resp = requests.post(url, json=data, headers=headers, timeout=30)
+        resp.raise_for_status()
+        rj = resp.json()
+        candid = rj.get("candidates",[])
+        if candid:
+            return candid[0]["content"]["parts"][0]["text"].strip()
+        return "Error: No candidates in API response"
     except Exception as e:
-        return f"Error: Unexpected error - {str(e)}"
+        return f"Error: API request failed - {str(e)}"
+
+# ——— UI & interaction (unchanged) ———
 
 st.markdown('<h1 class="main-title">🤖 AI Agent To Chat With Websites</h1>', unsafe_allow_html=True)
 st.markdown('<p class="subtitle">Engage in a natural, interactive conversation about website content!</p>', unsafe_allow_html=True)
@@ -495,14 +341,13 @@ if st.button("🔍 Load Website", key="load_button"):
             
             if len(result) == 3:
                 content, extraction_method, stats = result
-                if "Error:" not in content:
+                if not content.startswith("Error:"):
                     st.session_state.content = content
                     st.session_state.extraction_method = extraction_method
                     st.session_state.content_stats = stats
                     st.session_state.error = None
                     st.session_state.summary = ""
                     
-                    # Success message
                     st.markdown(f"""
                     <div class="success-message">
                         ✅ <strong>Website loaded successfully!</strong><br>
