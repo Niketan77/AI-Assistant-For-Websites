@@ -535,8 +535,6 @@ with st.expander("ℹ️ How to Use & Tips"):
     ### ⚠️ Limitations:
     - Some sites may block automated access
     - Very complex JavaScript applications might need manual review
-
-    ### 🚀 You can try o
     """)
 
 # Footer
