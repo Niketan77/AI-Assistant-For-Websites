@@ -520,6 +520,7 @@ with st.expander("ℹ️ How to Use & Tips"):
     2. **Load Content:** Click "Load Website"
     3. **Generate Summary:** Click the summary button to get an overview
     4. **Start Chatting:** Type questions in the input box and click Send
+    5. **Try This:** For testing, you can try with [https://en.wikipedia.org/wiki/Wildlife](https://en.wikipedia.org/wiki/Wildlife)
     
     ### 💡 Tips for Better Results:
     - **Specific Questions:** Ask targeted questions for detailed answers
@@ -534,6 +535,8 @@ with st.expander("ℹ️ How to Use & Tips"):
     ### ⚠️ Limitations:
     - Some sites may block automated access
     - Very complex JavaScript applications might need manual review
+
+    ### 🚀 You can try o
     """)
 
 # Footer
